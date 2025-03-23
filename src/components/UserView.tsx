@@ -113,7 +113,7 @@ const UserView: React.FC = () => {
       const params = functionAbi.inputs.map((input: any) => {
         const value = functionInputs[input.name];
         if (input.type === 'uint256') {
-          return ethers.utils.parseUnits(value,'6');
+          return ethers.utils.parseUnits(value,'18');
         }
         return value || '';
       });
@@ -132,7 +132,7 @@ const UserView: React.FC = () => {
       const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
       const ContractInstance = new ethers.Contract(transactionDetails.contractDetails.address, transactionDetails.contractDetails.abi, ethersProvider)
       const balance = await ContractInstance.balanceOf(params[0]);
-        alert(`Available Balance is ${balance?.toString()}`);
+        alert(`Available Balance is ${balance?.toString() /10**18}`);
         return
       }
       const value = functionAbi.stateMutability === 'payable' && params.length > 0

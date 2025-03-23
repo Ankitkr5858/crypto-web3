@@ -42,9 +42,9 @@ const DeveloperView: React.FC = () => {
 
     setContractDetails({
       abi: JSON.stringify(dummyABI, null, 2),
-      chainId: "80002",
-      rpcUrl: 'https://polygon-amoy.drpc.org',
-      address: '0x8b0be650f88Ba57D5067A48043c0aC641c5323A1' 
+      chainId: "97",
+      rpcUrl: 'https://bsc-testnet-rpc.publicnode.com',
+      address: '0x8b687f9D5DAcF1e5dF395684BaBf5EC4F81cc2cc' 
     });
   };
 
