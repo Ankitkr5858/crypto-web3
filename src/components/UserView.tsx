@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MetaKeep } from 'metakeep';
-import { Send, Wallet, AlertCircle, Loader2, ArrowLeft, Underline } from 'lucide-react';
+import { Send, Wallet, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { TransactionLink } from '../types';
 import { ethers } from 'ethers';
 
@@ -21,12 +21,9 @@ const UserView: React.FC = () => {
 
   useEffect(() => {
     if (data) {
-      console.log(data,"data");
       try {
         const decoded = JSON.parse(decodeURIComponent(data));
         setTransactionDetails(decoded);
-
-        // Initialize function ABI and inputs
         if (decoded.contractDetails.abi) {
           const abiData = JSON.parse(decoded.contractDetails.abi);
           const foundFunction = abiData.find((item: any) =>
@@ -53,26 +50,19 @@ const UserView: React.FC = () => {
         setConnecting(true);
         const chainId = transactionDetails?.contractDetails?.chainId
         const rpcUrl = transactionDetails?.contractDetails?.rpcUrl
-        if(!chainId || !rpcUrl) return 
+        if (!chainId || !rpcUrl) return
         const metakeepSDK = new MetaKeep({
           appId: TEST_APP_ID,
           chainId: Number(chainId),
           rpcNodeUrls: {
-            [Number(chainId)] : rpcUrl, 
+            [Number(chainId)]: rpcUrl,
           },
         });
-
-        // Set SDK instance
         setSdk(metakeepSDK);
-
-        // Get user wallet
         const user = await metakeepSDK.getUser();
         if (!user) {
-          // If no user, initiate login
           await metakeepSDK.login();
         }
-
-        // Get wallet after login
         const wallet = await metakeepSDK.getWallet();
         if (wallet) {
           setWalletAddress(wallet?.wallet?.ethAddress);
@@ -80,7 +70,6 @@ const UserView: React.FC = () => {
 
         setError('');
       } catch (error: any) {
-        console.error('MetaKeep SDK initialization error:', error);
         setError('Failed to initialize MetaKeep SDK. Please try again.');
       } finally {
         setConnecting(false);
@@ -88,7 +77,6 @@ const UserView: React.FC = () => {
     };
 
     if (transactionDetails) {
-      console.log("sdkcalled");
       initializeSDK();
     } else {
       setConnecting(false);
@@ -109,73 +97,94 @@ const UserView: React.FC = () => {
     setError('');
 
     try {
-      const iface = new ethers.utils.Interface(transactionDetails.contractDetails.abi);
-      const params = functionAbi.inputs.map((input: any) => {
-        const value = functionInputs[input.name];
-        if (input.type === 'uint256') {
-          return ethers.utils.parseUnits(value, 6);
-        }
-        return value || '';
-      });
-
-      const encodedData = iface.encodeFunctionData(
-        transactionDetails.functionName,
-        params
-      );
-      
-      console.log(transactionDetails.functionName,"transactionDetails.functionName");
-      console.log(params, "params");
-
-      if(transactionDetails.functionName == "balanceOf"){
       const web3Provider = await sdk.ethereum;
       await web3Provider.enable();
       const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
-      const ContractInstance = new ethers.Contract(transactionDetails.contractDetails.address, transactionDetails.contractDetails.abi, ethersProvider)
-      const balance = await ContractInstance.balanceOf(params[0]);
-        alert(`Available Balance is ${balance?.toString() /10**6}`);
-        return
+      const signer = ethersProvider.getSigner();
+      const fromAddress = await signer.getAddress();
+
+      if (!fromAddress) {
+        throw new Error("No connected wallet found");
       }
-      const value = functionAbi.stateMutability === 'payable' && params.length > 0
-        ? params[0]
-        : '0x0';
 
-      const web3Provider = await sdk.ethereum;
-      await web3Provider.enable();
-      const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
-      const signer = ethersProvider.getSigner()
-      const signerAddress = await signer.getAddress()
-      console.log(signerAddress)
+      console.log(transactionDetails?.functionName, "transactionDetails.functionNam");
+      if (transactionDetails?.functionName === "balanceOf") {
+        const contract = new ethers.Contract(
+          transactionDetails.contractDetails.address,
+          [functionAbi],
+          ethersProvider
+        );
+        const balance = await contract.balanceOf(functionInputs._owner);
+        alert(`Available Balance: ${ethers.utils.formatUnits(balance, 6)} USDT`);
+        setLoading(false);
+        return;
+      }
 
+      if (transactionDetails.functionName === "transfer") {
+        const contract = new ethers.Contract(
+          transactionDetails?.contractDetails?.address,
+          [{
+            "inputs": [
+              {
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "value",
+                "type": "uint256"
+              }
+            ],
+            "name": "transfer",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }],
+          signer
+        );
+        const amount = ethers.utils.parseUnits(functionInputs?._value, 6);
+        const txResponse = await contract.transfer(functionInputs?._to, amount?.toString());
+        await txResponse.wait();
+        setTransactionHash(txResponse?.hash);
+        return;
+      }
+
+      const iface = new ethers.utils.Interface([functionAbi]);
+      const params = functionAbi.inputs.map((input: any) => functionInputs[input?.name]);
+      const encodedData = iface.encodeFunctionData(transactionDetails?.functionName, params);
+      const value = functionAbi.stateMutability === 'payable' ? params[0] : '0x0';
       const feeData = await ethersProvider.getFeeData();
-      const maxFeePerGas = feeData?.maxFeePerGas?.toString(); 
-      const maxPriorityFeePerGas = feeData?.maxPriorityFeePerGas?.toString(); 
-
-      // Create transaction object
-      const transaction = {
+      const tx = {
         to: transactionDetails.contractDetails.address,
         data: encodedData,
         value: value,
         chainId: parseInt(transactionDetails.contractDetails.chainId),
         type: 2,
-        maxFeePerGas: maxFeePerGas,
-        maxPriorityFeePerGas: maxPriorityFeePerGas
+        maxFeePerGas: feeData.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+        from: fromAddress,
       };
 
-      const txResponse = await signer.sendTransaction(transaction)
-      await txResponse.wait()
-      console.log('Transaction sent:', txResponse.hash);
-      setTransactionHash(txResponse.hash)
+      const txResponse = await signer.sendTransaction(tx);
+      setTransactionHash(txResponse?.hash);
+      await txResponse.wait();
     } catch (error: any) {
       console.error('Transaction error:', error);
-      setError(error.message || 'Transaction failed');
+      let errorMsg = error.message;
+
+      if (error.code === 'INSUFFICIENT_FUNDS') {
+        errorMsg = "Insufficient MATIC for gas fees";
+      } else if (error.data?.message?.includes('transfer from the zero address')) {
+        errorMsg = "Wallet not properly connected";
+      } else if (error.reason) {
+        errorMsg = error.reason;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
   };
-
-
-
-
 
   if (!data) {
     return (
@@ -217,14 +226,6 @@ const UserView: React.FC = () => {
             <h2 className="text-lg font-semibold">Error</h2>
           </div>
           <p className="text-red-600">{error}</p>
-          <a
-            href="https://docs.metakeep.xyz/reference/sdk-101"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block mt-4 text-red-700 hover:text-red-800 underline"
-          >
-            Learn more about MetaKeep SDK
-          </a>
         </div>
       </div>
     );
@@ -241,7 +242,6 @@ const UserView: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Execute Transaction</h1>
-
       <div className="bg-white rounded-lg shadow-lg p-6 space-y-6">
         {walletAddress && (
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-center gap-3">
@@ -287,9 +287,6 @@ const UserView: React.FC = () => {
                   <div key={input.name} className="space-y-1">
                     <label className="block text-sm text-gray-600">
                       {input.name} ({input.type})
-                      {functionAbi.stateMutability === 'payable' && input.name === 'amount' && (
-                        <span className="ml-2 text-blue-600">(Transaction Value)</span>
-                      )}
                     </label>
                     <input
                       type={input.type === 'uint256' ? 'number' : 'text'}
@@ -326,14 +323,10 @@ const UserView: React.FC = () => {
             </>
           )}
         </button>
-
-        {/* Transaction hash result */}
         {transactionHash && (
           <div className="mt-4">
             <h2>Transaction Hash:</h2>
-      
               {transactionHash}
-        
           </div>
         )}
       </div>
