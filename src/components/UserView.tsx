@@ -113,7 +113,7 @@ const UserView: React.FC = () => {
       const params = functionAbi.inputs.map((input: any) => {
         const value = functionInputs[input.name];
         if (input.type === 'uint256') {
-          return ethers.utils.parseUnits(value,'18');
+          return ethers.utils.parseUnits(value, 6);
         }
         return value || '';
       });
@@ -132,7 +132,7 @@ const UserView: React.FC = () => {
       const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
       const ContractInstance = new ethers.Contract(transactionDetails.contractDetails.address, transactionDetails.contractDetails.abi, ethersProvider)
       const balance = await ContractInstance.balanceOf(params[0]);
-        alert(`Available Balance is ${balance?.toString() /10**18}`);
+        alert(`Available Balance is ${balance?.toString() /10**6}`);
         return
       }
       const value = functionAbi.stateMutability === 'payable' && params.length > 0
@@ -331,14 +331,9 @@ const UserView: React.FC = () => {
         {transactionHash && (
           <div className="mt-4">
             <h2>Transaction Hash:</h2>
-            <a
-              href={`https://testnet.bscscan.com/tx/${transactionHash}`} // Change the link to the appropriate network explorer
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500"
-            >
+      
               {transactionHash}
-            </a>
+        
           </div>
         )}
       </div>
