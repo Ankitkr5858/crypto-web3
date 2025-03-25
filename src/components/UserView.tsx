@@ -90,101 +90,100 @@ const UserView: React.FC = () => {
     }));
   };
 
-  const executeTransaction = async () => {
-    if (!transactionDetails || !sdk || !functionAbi) return;
+const executeTransaction = async () => {
+  if (!transactionDetails || !sdk || !functionAbi) return;
 
-    setLoading(true);
-    setError('');
+  setLoading(true);
+  setError('');
+  setTransactionHash('');
 
-    try {
-      const web3Provider = await sdk.ethereum;
-      await web3Provider.enable();
-      const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
-      const signer = ethersProvider.getSigner();
-      const fromAddress = await signer.getAddress();
+  try {
+    // 1. Initialize provider and signer
+    const web3Provider = await sdk.ethereum;
+    await web3Provider.enable();
+    const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
+    const signer = ethersProvider.getSigner();
 
-      if (!fromAddress) {
-        throw new Error("No connected wallet found");
+    // 2. Prepare contract instance
+    const contract = new ethers.Contract(
+      transactionDetails.contractDetails.address,
+      [functionAbi], // Using just the single function ABI
+      functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure' 
+        ? ethersProvider 
+        : signer
+    );
+
+  
+    // 3. Prepare parameters
+    const params = functionAbi.inputs.map((input: any) => {
+      // Handle address types
+      if (input.type === 'address') return functionInputs[input.name];
+      // Handle uint256 types with decimals
+      if (input.type.includes('uint')) {
+        const decimals = transactionDetails?.contractDetails?.decimals || 6;
+        return ethers.utils.parseUnits(functionInputs[input.name], decimals);
       }
+      return functionInputs[input.name];
+    });
+    
+    console.log(params,"params");
 
-      console.log(transactionDetails?.functionName, "transactionDetails.functionNam");
-      if (transactionDetails?.functionName === "balanceOf") {
-        const contract = new ethers.Contract(
-          transactionDetails.contractDetails.address,
-          [functionAbi],
-          ethersProvider
-        );
-        const balance = await contract.balanceOf(functionInputs._owner);
-        alert(`Available Balance: ${ethers.utils.formatUnits(balance, 6)} USDT`);
-        setLoading(false);
-        return;
+    // 4. Prepare transaction overrides
+    const overrides: ethers.CallOverrides = {};
+    if (functionAbi.stateMutability === 'payable') {
+      const valueInput = functionAbi.inputs.find(
+        (input: any) => input.type === 'uint256' && input.name.toLowerCase().includes('value')
+      );
+      if (valueInput && functionInputs[valueInput.name]) {
+        overrides.value = ethers.utils.parseEther(functionInputs[valueInput.name]);
       }
-
-      if (transactionDetails.functionName === "transfer") {
-        const contract = new ethers.Contract(
-          transactionDetails?.contractDetails?.address,
-          [{
-            "inputs": [
-              {
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-              },
-              {
-                "internalType": "uint256",
-                "name": "value",
-                "type": "uint256"
-              }
-            ],
-            "name": "transfer",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function"
-          }],
-          signer
-        );
-        const amount = ethers.utils.parseUnits(functionInputs?._value, 6);
-        const txResponse = await contract.transfer(functionInputs?._to, amount?.toString());
-        await txResponse.wait();
-        setTransactionHash(txResponse?.hash);
-        return;
-      }
-
-      const iface = new ethers.utils.Interface([functionAbi]);
-      const params = functionAbi.inputs.map((input: any) => functionInputs[input?.name]);
-      const encodedData = iface.encodeFunctionData(transactionDetails?.functionName, params);
-      const value = functionAbi.stateMutability === 'payable' ? params[0] : '0x0';
-      const feeData = await ethersProvider.getFeeData();
-      const tx = {
-        to: transactionDetails.contractDetails.address,
-        data: encodedData,
-        value: value,
-        chainId: parseInt(transactionDetails.contractDetails.chainId),
-        type: 2,
-        maxFeePerGas: feeData.maxFeePerGas?.toString(),
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
-        from: fromAddress,
-      };
-
-      const txResponse = await signer.sendTransaction(tx);
-      setTransactionHash(txResponse?.hash);
-      await txResponse.wait();
-    } catch (error: any) {
-      console.error('Transaction error:', error);
-      let errorMsg = error.message;
-
-      if (error.code === 'INSUFFICIENT_FUNDS') {
-        errorMsg = "Insufficient MATIC for gas fees";
-      } else if (error.data?.message?.includes('transfer from the zero address')) {
-        errorMsg = "Wallet not properly connected";
-      } else if (error.reason) {
-        errorMsg = error.reason;
-      }
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
     }
-  };
+    
+    console.log(functionAbi.stateMutability ,"functionAbi.stateMutability");
+
+    // 5. Execute based on function type
+    if (functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure') {
+      // Read-only function call
+      const result = await contract[transactionDetails.functionName](...params, overrides);
+      
+      // Format the result based on output type
+      if (functionAbi.outputs?.length === 1) {
+        const output = functionAbi.outputs[0];
+        if (output.type.includes('uint')) {
+          const decimals = transactionDetails?.contractDetails?.decimals || 6;
+          alert(`Result: ${ethers.utils.formatUnits(result, decimals)}`);
+        } else {
+          alert(`Result: ${result.toString()}`);
+        }
+      } else {
+        alert(`Result: ${JSON.stringify(result)}`);
+      }
+    } else {
+      // Write transaction
+      const tx = await contract[transactionDetails.functionName](...params, overrides);
+      setTransactionHash(tx.hash);
+      // Optional: Wait for confirmation (can be removed if not needed)
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed:', receipt);
+    }
+  } catch (error: any) {
+    console.error('Transaction failed:', error);
+    // Improved error handling
+    let errorMsg = 'Transaction failed';
+    if (error.code === 'INSUFFICIENT_FUNDS') {
+      errorMsg = 'Insufficient funds for gas fees';
+    } else if (error.reason) {
+      errorMsg = error.reason;
+    } else if (error.message) {
+      errorMsg = error.message;
+    } else if (error.data?.message) {
+      errorMsg = error.data.message;
+    }
+    setError(errorMsg);
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!data) {
     return (
@@ -324,9 +323,9 @@ const UserView: React.FC = () => {
           )}
         </button>
         {transactionHash && (
-          <div className="mt-4">
-            <h2>Transaction Hash:</h2>
-              {transactionHash}
+          <div className="mt-4 p-3 bg-green-50 rounded-md">
+            <div className="text-sm text-green-700 mb-1">Transaction successful!</div>
+            <div className="font-mono text-sm break-all">{transactionHash}</div>
           </div>
         )}
       </div>

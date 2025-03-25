@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState } from 'react';
 import { ContractDetails, TransactionLink } from '../types';
-import { Share2, Code2, Check, Copy } from 'lucide-react';
+import { Share2, Code2, Check, Copy, AlertCircle } from 'lucide-react';
 
 const DeveloperView: React.FC = () => {
   const [contractDetails, setContractDetails] = useState<ContractDetails>({
@@ -10,59 +11,145 @@ const DeveloperView: React.FC = () => {
     address: '',
   });
   const [selectedFunction, setSelectedFunction] = useState('');
-  const [parameters, setParameters] = useState<string[]>([]);
   const [transactionLink, setTransactionLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [abiError, setAbiError] = useState<string | null>(null);
+
+  const validateABI = (abiString: string): boolean => {
+    try {
+      const parsed = JSON.parse(abiString);
+      
+      if (!Array.isArray(parsed)) {
+        setAbiError('ABI must be a JSON array');
+        return false;
+      }
+
+      // Check for at least one function
+      const hasFunctions = parsed.some(item => item.type === 'function');
+      if (!hasFunctions) {
+        setAbiError('ABI must contain at least one function');
+        return false;
+      }
+
+      // Validate each function
+      for (const item of parsed) {
+        if (item.type === 'function') {
+          if (!item.name || typeof item.name !== 'string') {
+            setAbiError(`Function is missing a valid name`);
+            return false;
+          }
+
+          if (!Array.isArray(item.inputs)) {
+            setAbiError(`Function ${item.name} has invalid inputs format`);
+            return false;
+          }
+
+          if (!Array.isArray(item.outputs)) {
+            setAbiError(`Function ${item.name} has invalid outputs format`);
+            return false;
+          }
+
+          const validMutabilities = ['pure', 'view', 'nonpayable', 'payable'];
+          if (!validMutabilities.includes(item.stateMutability)) {
+            setAbiError(`Function ${item.name} has invalid stateMutability`);
+            return false;
+          }
+        }
+      }
+
+      setAbiError(null);
+      return true;
+    } catch (e) {
+      setAbiError('Invalid JSON format');
+      return false;
+    }
+  };
 
   const handleContractDetailsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setContractDetails(prev => ({ ...prev, [name]: value }));
+    
+    // Validate ABI when it changes
+    if (name === 'abi') {
+      validateABI(value);
+    }
   };
 
   const loadDummyData = () => {
-    // Test contract for USDC on Mumbai Testnet
     const dummyABI = [
-            {
-                constant: true,
-                inputs: [{ name: "_owner", type: "address" }],
-                name: "balanceOf",
-                outputs: [{ name: "balance", type: "uint256" }],
-                type: "function"
-            },
-            {
-                constant: false,
-                inputs: [
-                    { name: "_to", type: "address" },
-                    { name: "_value", type: "uint256" }
-                ],
-                name: "transfer",
-                type: "function"
-            }
-        ];
+      {
+        "inputs": [{"internalType": "address","name": "account","type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {"internalType": "address","name": "to","type": "address"},
+          {"internalType": "uint256","name": "value","type": "uint256"}
+        ],
+        "name": "transfer",
+        "outputs": [{"internalType": "bool","name": "","type": "bool"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {"internalType": "address","name": "spender","type": "address"},
+          {"internalType": "uint256","name": "value","type": "uint256"}
+        ],
+        "name": "approve",
+        "outputs": [{"internalType": "bool","name": "","type": "bool"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"internalType": "uint8","name": "","type": "uint8"}],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ];
 
     setContractDetails({
       abi: JSON.stringify(dummyABI, null, 2),
-      chainId: "97",
-      rpcUrl: 'https://bsc-testnet-rpc.publicnode.com',
-      address: '0x8b687f9D5DAcF1e5dF395684BaBf5EC4F81cc2cc' 
+      chainId: "137",
+      rpcUrl: 'https://polygon.llamarpc.com',
+      address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' 
     });
+    setAbiError(null);
   };
 
   const parseABI = () => {
     try {
+      if (!contractDetails.abi) return [];
       const parsedABI = JSON.parse(contractDetails.abi);
-      return parsedABI.filter((item: any) => item.type === 'function').map((func: any) => func.name);
+      return parsedABI
+        .filter((item: any) => item.type === 'function')
+        .map((func: any) => func.name);
     } catch (error) {
-      console.error('Invalid ABI format');
       return [];
     }
   };
 
   const generateLink = () => {
+    // Validate all fields
+    if (!validateABI(contractDetails.abi)) return;
+    if (!contractDetails.address) {
+      setAbiError('Contract address is required');
+      return;
+    }
+    if (!selectedFunction) {
+      setAbiError('Please select a function');
+      return;
+    }
+
     const link: TransactionLink = {
       contractDetails,
       functionName: selectedFunction,
-      parameters: ['', ''],
+      parameters: ['', ''], // Default empty parameters
     };
     
     const encodedData = encodeURIComponent(JSON.stringify(link));
@@ -78,6 +165,13 @@ const DeveloperView: React.FC = () => {
     } catch (err) {
       console.error('Failed to copy:', err);
     }
+  };
+
+  const isFormValid = () => {
+    return contractDetails.abi && 
+           contractDetails.address && 
+           selectedFunction && 
+           !abiError;
   };
 
   return (
@@ -100,10 +194,19 @@ const DeveloperView: React.FC = () => {
             name="abi"
             value={contractDetails.abi}
             onChange={handleContractDetailsChange}
-            className="w-full p-3 border rounded-lg font-mono text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className={`w-full p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+              abiError ? 'border-red-500 bg-red-50' : 'bg-gray-50'
+            }`}
             rows={8}
             placeholder="Paste your contract ABI here..."
+            spellCheck="false"
           />
+          {abiError && (
+            <div className="flex items-center gap-2 text-red-600 text-sm">
+              <AlertCircle size={16} />
+              <span>{abiError}</span>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -160,12 +263,10 @@ const DeveloperView: React.FC = () => {
 
         <button
           onClick={generateLink}
-          disabled={!contractDetails.abi || !contractDetails.address || !selectedFunction}
-          className={`w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-white font-medium transition-colors
-            ${!contractDetails.abi || !contractDetails.address || !selectedFunction
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-            }`}
+          disabled={!isFormValid()}
+          className={`w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-white font-medium transition-colors ${
+            !isFormValid() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
         >
           <Share2 size={20} />
           Generate Link
