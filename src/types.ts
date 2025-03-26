@@ -1,4 +1,5 @@
 export interface ContractDetails {
+  decimals: number;
   abi: string;
   chainId: string;
   rpcUrl: string;

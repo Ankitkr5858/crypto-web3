@@ -24,14 +24,12 @@ const DeveloperView: React.FC = () => {
         return false;
       }
 
-      // Check for at least one function
       const hasFunctions = parsed.some(item => item.type === 'function');
       if (!hasFunctions) {
         setAbiError('ABI must contain at least one function');
         return false;
       }
 
-      // Validate each function
       for (const item of parsed) {
         if (item.type === 'function') {
           if (!item.name || typeof item.name !== 'string') {
@@ -68,8 +66,6 @@ const DeveloperView: React.FC = () => {
   const handleContractDetailsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setContractDetails(prev => ({ ...prev, [name]: value }));
-    
-    // Validate ABI when it changes
     if (name === 'abi') {
       validateABI(value);
     }
@@ -135,7 +131,6 @@ const DeveloperView: React.FC = () => {
   };
 
   const generateLink = () => {
-    // Validate all fields
     if (!validateABI(contractDetails.abi)) return;
     if (!contractDetails.address) {
       setAbiError('Contract address is required');
@@ -149,7 +144,7 @@ const DeveloperView: React.FC = () => {
     const link: TransactionLink = {
       contractDetails,
       functionName: selectedFunction,
-      parameters: ['', ''], // Default empty parameters
+      parameters: ['', ''],
     };
     
     const encodedData = encodeURIComponent(JSON.stringify(link));

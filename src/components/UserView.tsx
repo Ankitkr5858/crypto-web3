@@ -98,27 +98,20 @@ const executeTransaction = async () => {
   setTransactionHash('');
 
   try {
-    // 1. Initialize provider and signer
     const web3Provider = await sdk.ethereum;
     await web3Provider.enable();
     const ethersProvider = new ethers.providers.Web3Provider(web3Provider);
     const signer = ethersProvider.getSigner();
 
-    // 2. Prepare contract instance
     const contract = new ethers.Contract(
       transactionDetails.contractDetails.address,
-      [functionAbi], // Using just the single function ABI
+      [functionAbi],
       functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure' 
         ? ethersProvider 
         : signer
     );
-
-  
-    // 3. Prepare parameters
     const params = functionAbi.inputs.map((input: any) => {
-      // Handle address types
       if (input.type === 'address') return functionInputs[input.name];
-      // Handle uint256 types with decimals
       if (input.type.includes('uint')) {
         const decimals = transactionDetails?.contractDetails?.decimals || 6;
         return ethers.utils.parseUnits(functionInputs[input.name], decimals);
@@ -126,9 +119,6 @@ const executeTransaction = async () => {
       return functionInputs[input.name];
     });
     
-    console.log(params,"params");
-
-    // 4. Prepare transaction overrides
     const overrides: ethers.CallOverrides = {};
     if (functionAbi.stateMutability === 'payable') {
       const valueInput = functionAbi.inputs.find(
@@ -138,15 +128,9 @@ const executeTransaction = async () => {
         overrides.value = ethers.utils.parseEther(functionInputs[valueInput.name]);
       }
     }
-    
-    console.log(functionAbi.stateMutability ,"functionAbi.stateMutability");
 
-    // 5. Execute based on function type
     if (functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure') {
-      // Read-only function call
       const result = await contract[transactionDetails.functionName](...params, overrides);
-      
-      // Format the result based on output type
       if (functionAbi.outputs?.length === 1) {
         const output = functionAbi.outputs[0];
         if (output.type.includes('uint')) {
@@ -159,16 +143,12 @@ const executeTransaction = async () => {
         alert(`Result: ${JSON.stringify(result)}`);
       }
     } else {
-      // Write transaction
       const tx = await contract[transactionDetails.functionName](...params, overrides);
       setTransactionHash(tx.hash);
-      // Optional: Wait for confirmation (can be removed if not needed)
       const receipt = await tx.wait();
-      console.log('Transaction confirmed:', receipt);
     }
   } catch (error: any) {
     console.error('Transaction failed:', error);
-    // Improved error handling
     let errorMsg = 'Transaction failed';
     if (error.code === 'INSUFFICIENT_FUNDS') {
       errorMsg = 'Insufficient funds for gas fees';

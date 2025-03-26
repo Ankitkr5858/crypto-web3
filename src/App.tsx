@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DeveloperView from './components/DeveloperView';
 import UserView from './components/UserView';
-import Login from './components/Login';
 import { Code2, Users, LogOut } from 'lucide-react';
 import { MetaKeep } from 'metakeep';
-import DirectTransfer from './components/DirectTransfer';
 
 const TEST_APP_ID = '3122c75e-8650-4a47-8376-d1dda7ef8c58';
 
@@ -82,8 +80,6 @@ function App() {
           <Routes>
             <Route path="/" element={<DeveloperView />} />
             <Route path="/execute/:data" element={<UserView />} />
-            <Route path="/directTransfer" element={<DirectTransfer/>} />
-            <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} />} />
           </Routes>
         </main>
       </div>
