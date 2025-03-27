@@ -9,6 +9,7 @@ const DeveloperView: React.FC = () => {
     chainId: '',
     rpcUrl: '',
     address: '',
+    decimals: 18,
   });
   const [selectedFunction, setSelectedFunction] = useState('');
   const [transactionLink, setTransactionLink] = useState('');
@@ -113,7 +114,8 @@ const DeveloperView: React.FC = () => {
       abi: JSON.stringify(dummyABI, null, 2),
       chainId: "137",
       rpcUrl: 'https://polygon.llamarpc.com',
-      address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' 
+      address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' ,
+      decimals: 6,
     });
     setAbiError(null);
   };
@@ -211,6 +213,15 @@ const DeveloperView: React.FC = () => {
               type="text"
               name="chainId"
               value={contractDetails.chainId}
+              onChange={handleContractDetailsChange}
+              className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="e.g., 80001 for Mumbai Testnet"
+            />
+               <label className="block text-sm font-medium text-gray-700">Decimals</label>
+              <input
+              type="text"
+              name="decimals"
+              value={contractDetails.decimals}
               onChange={handleContractDetailsChange}
               className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="e.g., 80001 for Mumbai Testnet"
